@@ -95,6 +95,10 @@ async function getVerifyKey(keyId) {
     throw new Error('Отпечаток ключа не сходится с посчитанным — подозрительно, прерываю');
   }
 
+  // TODO (опционально): здесь можно захардкодить эталонный fingerprint из ТЗ
+  // части 1 (раздел 3) и сверить его тоже — доп. защита от подмены /ether/key.
+  // const KNOWN_FINGERPRINT = '...';
+  // if (data.fingerprint !== KNOWN_FINGERPRINT) throw new Error('fingerprint не совпадает с ТЗ');
 
   const cryptoKey = await subtle.importKey(
     'raw',
@@ -158,11 +162,14 @@ async function verifyEnvelope(envelope) {
 async function main() {
   const state = loadState();
 
+  console.log(`Опрашиваю ${API_BASE}/ether`);
+
   let res;
   try {
     res = await fetch(`${API_BASE}/ether`, { signal: AbortSignal.timeout(10_000) });
   } catch (err) {
     console.warn('Сеть недоступна или обрыв:', err.message);
+    if (err.cause) console.warn('  причина (cause):', err.cause.message || err.cause);
     return; // просто выходим, следующий запуск по расписанию попробует снова
   }
 
