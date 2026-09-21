@@ -41,13 +41,20 @@ function b64uToBytes(s) {
 // --- состояние -----------------------------------------------------------
 
 function loadState() {
-  if (!existsSync(STATE_PATH)) {
-    return { lastKnownKey: null, notifiedHarbinger: false, notifiedWindow: false, lastAt: null };
-  }
+  const empty = {
+    lastKnownKey: null,
+    notifiedHarbinger: false,
+    notifiedWindow: false,
+    lastAt: null,
+    fragments: {}, // { "3": "текст уривка" }
+    fragmentsOf: null, // общее число уривков (из поля `of`)
+    fragmentsNotified: false, // письмо уже собрано и отправлено целиком
+  };
+  if (!existsSync(STATE_PATH)) return empty;
   try {
-    return JSON.parse(readFileSync(STATE_PATH, 'utf8'));
+    return { ...empty, ...JSON.parse(readFileSync(STATE_PATH, 'utf8')) };
   } catch {
-    return { lastKnownKey: null, notifiedHarbinger: false, notifiedWindow: false, lastAt: null };
+    return empty;
   }
 }
 
@@ -223,6 +230,28 @@ async function main() {
       `API: ${API_BASE}`;
     await sendTelegram(text);
     state.notifiedWindow = true;
+  }
+
+  // --- уривки листа Доглядача (CL-35) ---
+  if (frame.fragment && frame.fragment.text) {
+    const { n, of, text: fragText } = frame.fragment;
+    const key = String(n);
+    if (!(key in state.fragments)) {
+      state.fragments[key] = fragText;
+      state.fragmentsOf = of;
+      console.log(`Пойман уривок ${n}/${of}`);
+      await sendTelegram(`📜 Уривок листа ${n}/${of} пойман (${Object.keys(state.fragments).length}/${of} всего).`);
+    }
+  }
+
+  const haveAllFragments =
+    state.fragmentsOf && Object.keys(state.fragments).length >= state.fragmentsOf;
+
+  if (haveAllFragments && !state.fragmentsNotified) {
+    const fullText = Array.from({ length: state.fragmentsOf }, (_, i) => state.fragments[String(i + 1)] || '???')
+      .join(' ');
+    await sendTelegram(`📖 <b>Лист Доглядача зібрано повністю:</b>\n\n${fullText}`);
+    state.fragmentsNotified = true;
   }
 
   // Если фаза откатилась в static (например, тест на стенде пошёл по кругу) —
