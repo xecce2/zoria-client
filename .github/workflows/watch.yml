@@ -2,11 +2,10 @@ name: Зоря — сторож просвіту
 
 on:
   schedule:
-    # Смещено с круглых *:00/*:10 и т.д. — на них у GitHub самая высокая
-    # нагрузка и старт может ощутимо задерживаться. 7,17,27... — то же
-    # самое "раз в 10 минут", но в менее загруженные моменты.
+    # Раз в 10 минут, но не на "круглых" минутах (:00, :10, ...): на них у GitHub
+    # пик нагрузки, и запуски по расписанию задерживаются или теряются.
     - cron: '7,17,27,37,47,57 * * * *'
-  workflow_dispatch: # кнопка "Run workflow" в интерфейсе GitHub — для ручного теста
+  workflow_dispatch: # кнопка "Run workflow" — ручной запуск для теста
     inputs:
       server:
         description: 'Какой сервер опрашивать'
@@ -17,7 +16,7 @@ on:
           - stand
 
 permissions:
-  contents: write # нужно, чтобы коммитить state.json
+  contents: write # чтобы коммитить state.json
 
 concurrency:
   group: zoria-watch
@@ -26,12 +25,13 @@ concurrency:
 jobs:
   watch:
     runs-on: ubuntu-latest
+    timeout-minutes: 5 # если что-то зависнет — не держать очередь следующих запусков
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '24'
 
@@ -58,7 +58,9 @@ jobs:
             git config user.email "actions@users.noreply.github.com"
             git add state.json
             git commit -m "watch: update state [skip ci]"
-            git push
+            # если ты успел что-то запушить во время прогона — сначала подтянуть
+            git pull --rebase origin "$GITHUB_REF_NAME"
+            git push origin "HEAD:$GITHUB_REF_NAME"
           else
             echo "state.json не изменился, коммитить нечего"
           fi
