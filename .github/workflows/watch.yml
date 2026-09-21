@@ -3,7 +3,15 @@ name: Зоря — сторож просвіту
 on:
   schedule:
     - cron: '*/10 * * * *'
-  workflow_dispatch: {} # кнопка "Run workflow" в интерфейсе GitHub — для ручного теста
+  workflow_dispatch: # кнопка "Run workflow" в интерфейсе GitHub — для ручного теста
+    inputs:
+      server:
+        description: 'Какой сервер опрашивать'
+        type: choice
+        default: 'production'
+        options:
+          - production
+          - stand
 
 permissions:
   contents: write # нужно, чтобы коммитить state.json
@@ -22,13 +30,22 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
+
+      - name: Choose API base
+        id: api
+        run: |
+          if [ "${{ inputs.server }}" = "stand" ]; then
+            echo "base=https://stand.zoria.net/api/v1" >> "$GITHUB_OUTPUT"
+          else
+            echo "base=https://zoria.net/api/v1" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Run watcher
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          ZORIA_API_BASE: https://zoria.net/api/v1
+          ZORIA_API_BASE: ${{ steps.api.outputs.base }}
         run: node scripts/watch.mjs
 
       - name: Commit state if changed
